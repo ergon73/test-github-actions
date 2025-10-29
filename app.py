@@ -10,6 +10,9 @@ import os
 
 app = Flask(__name__)
 
+# Метка старта процесса приложения (UTC)
+PROCESS_STARTED_AT_UTC = datetime.datetime.utcnow()
+
 @app.route('/')
 def root():
     """
@@ -69,6 +72,32 @@ def system_info():
         "environment": os.environ.get("FLASK_ENV", "development"),
         # Добавляем метку коммита из CI/CD для верификации версии
         "commit_sha": os.environ.get("COMMIT_SHA", "unknown")
+    })
+
+@app.route('/uptime')
+def uptime():
+    """
+    Возвращает аптайм процесса приложения и системы (если доступно)
+    """
+    now = datetime.datetime.utcnow()
+    process_uptime = (now - PROCESS_STARTED_AT_UTC).total_seconds()
+
+    system_uptime = None
+    try:
+        # На Linux доступен файл /proc/uptime: "<seconds> <idle_seconds>"
+        if os.path.exists('/proc/uptime'):
+            with open('/proc/uptime', 'r') as f:
+                first = f.read().strip().split()[0]
+                system_uptime = float(first)
+    except Exception:
+        # Не критично, просто не заполним поле
+        system_uptime = None
+
+    return jsonify({
+        "now_utc": now.isoformat(),
+        "process_started_at_utc": PROCESS_STARTED_AT_UTC.isoformat(),
+        "process_uptime_sec": int(process_uptime),
+        "system_uptime_sec": int(system_uptime) if isinstance(system_uptime, float) else None
     })
 
 if __name__ == "__main__":
