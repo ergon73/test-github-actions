@@ -3,15 +3,38 @@ GitHub Actions CI/CD Demo Application
 Flask REST API с основными эндпоинтами для демонстрации CI/CD
 """
 
-from flask import Flask, jsonify
+from flask import Flask, jsonify, request, g
 import datetime
 import platform
 import os
+import time
 
 app = Flask(__name__)
 
 # Метка старта процесса приложения (UTC)
 PROCESS_STARTED_AT_UTC = datetime.datetime.utcnow()
+
+# Примитивные in-memory метрики по эндпоинтам
+ENDPOINT_STATS = {}
+
+
+@app.before_request
+def _start_timer():
+    g._request_started_at = time.perf_counter()
+
+
+@app.after_request
+def _collect_metrics(response):
+    try:
+        started = getattr(g, "_request_started_at", None)
+        if started is not None:
+            elapsed_ms = (time.perf_counter() - started) * 1000.0
+            endpoint = request.endpoint or "unknown"
+            stats = ENDPOINT_STATS.setdefault(endpoint, {"count": 0, "total_ms": 0.0})
+            stats["count"] += 1
+            stats["total_ms"] += float(elapsed_ms)
+    finally:
+        return response
 
 @app.route('/')
 def root():
@@ -98,6 +121,37 @@ def uptime():
         "process_started_at_utc": PROCESS_STARTED_AT_UTC.isoformat(),
         "process_uptime_sec": int(process_uptime),
         "system_uptime_sec": int(system_uptime) if isinstance(system_uptime, float) else None
+    })
+
+
+@app.route('/metrics')
+def metrics():
+    """
+    Возвращает базовые метрики приложения:
+    - аптайм
+    - суммарное число запросов
+    - по каждому эндпоинту: count и avg_latency_ms
+    """
+    now = datetime.datetime.utcnow()
+    uptime_sec = int((now - PROCESS_STARTED_AT_UTC).total_seconds())
+
+    per_endpoint = {}
+    total_requests = 0
+    for endpoint, s in ENDPOINT_STATS.items():
+        count = int(s.get("count", 0))
+        total_ms = float(s.get("total_ms", 0.0))
+        avg_ms = (total_ms / count) if count > 0 else 0.0
+        per_endpoint[endpoint] = {
+            "count": count,
+            "avg_latency_ms": round(avg_ms, 2)
+        }
+        total_requests += count
+
+    return jsonify({
+        "now_utc": now.isoformat(),
+        "uptime_sec": uptime_sec,
+        "total_requests": total_requests,
+        "endpoints": per_endpoint
     })
 
 if __name__ == "__main__":
