@@ -115,7 +115,9 @@ jobs:
           username: ${{ secrets.SSH_USERNAME }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           # Передаём переменные для возможного логина в GHCR на сервере
-          envs: CR_PAT,GITHUB_ACTOR
+          envs: CR_PAT
+          # Передаём GITHUB_ACTOR через env в script
+          env: GITHUB_ACTOR=${{ github.actor }},COMMIT_SHA=${{ github.sha }}
           # Останавливать выполнение при любой ошибке
           script_stop: true
           # Bash скрипт для деплоя
@@ -161,6 +163,7 @@ jobs:
             # ----------------------------------------------------------------
             # 3. Создание docker-compose.yml на сервере
             # Используем Heredoc БЕЗ кавычек для подстановки переменных
+            # COMMIT_SHA передаётся через env из GitHub Actions
             # ----------------------------------------------------------------
             echo "→ Creating docker-compose.yml..."
             cat > docker-compose.yml <<EOF
@@ -174,7 +177,7 @@ jobs:
                 environment:
                   - FLASK_ENV=production
                   - PORT=5000
-                  - COMMIT_SHA=${{ github.sha }}
+                  - COMMIT_SHA=${COMMIT_SHA}
                 restart: unless-stopped
                 healthcheck:
                   test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
