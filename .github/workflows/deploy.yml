@@ -114,6 +114,8 @@ jobs:
           host: ${{ secrets.SSH_HOST }}
           username: ${{ secrets.SSH_USERNAME }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
+          # Передаём CR_PAT если нужен логин в GHCR
+          envs: CR_PAT
           script_stop: true
           # Bash скрипт для деплоя
           script: |
@@ -149,6 +151,19 @@ jobs:
             mkdir -p "$APP_DIR"
             cd "$APP_DIR"
             echo "✓ Directory ready: $APP_DIR"
+            
+            # ----------------------------------------------------------------
+            # 2. Логин в GitHub Container Registry (GHCR)
+            # Опционально: если CR_PAT есть - логинимся, если нет - пробуем pull (для публичных)
+            # ----------------------------------------------------------------
+            GITHUB_ACTOR="${{ github.actor }}"
+            if [ -n "${CR_PAT:-}" ]; then
+              echo "→ Logging into GHCR with CR_PAT..."
+              echo "$CR_PAT" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
+              echo "✓ GHCR login successful"
+            else
+              echo "→ CR_PAT not provided, trying pull without login (public package assumed)"
+            fi
             
             # ----------------------------------------------------------------
             # 3. Создание docker-compose.yml на сервере
