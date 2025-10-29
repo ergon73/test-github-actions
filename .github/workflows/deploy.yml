@@ -151,22 +151,7 @@ jobs:
             cd "$APP_DIR"
             echo "✓ Directory ready: $APP_DIR"
             
-            # ----------------------------------------------------------------
-            # 2. Логин в GitHub Container Registry (GHCR)
-            # Опционально: если CR_PAT есть - логинимся, если нет - пробуем pull (для публичных)
-            # ----------------------------------------------------------------
-            GITHUB_ACTOR="${{ github.actor }}"
-            echo "→ Checking CR_PAT availability..."
-            if [ -n "${CR_PAT:-}" ]; then
-              echo "→ CR_PAT found, logging into GHCR..."
-              if echo "$CR_PAT" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin; then
-                echo "✓ GHCR login successful"
-              else
-                echo "⚠️ GHCR login failed, continuing anyway..."
-              fi
-            else
-              echo "→ CR_PAT not provided, trying pull without login (public package assumed)"
-            fi
+            # Пропускаем логин в GHCR: образ публичный, сразу переходим к созданию compose
             
             # ----------------------------------------------------------------
             # 3. Создание docker-compose.yml на сервере
