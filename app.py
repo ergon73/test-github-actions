@@ -19,7 +19,7 @@ def root():
         "message": "GitHub Actions CI/CD Demo (GHCR + Production Deploy)",
         "status": "running",
         "repository": "ergon73/test-github-actions",
-        "version": "1.0.0",
+        "version": "1.0.1",
         "registry": "ghcr.io",
         "endpoints": [
             "/",
