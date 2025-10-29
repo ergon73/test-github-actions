@@ -1,0 +1,239 @@
+# ============================================================================
+# GitHub Actions Workflow: Build and Deploy to Production
+# 
+# Триггеры:
+# - push в main: полный цикл (build + deploy)
+# - pull_request в main: только build (без деплоя)
+#
+# Jobs:
+# 1. build: Сборка и публикация Docker образа в GHCR
+# 2. deploy: Деплой на VPS через SSH (только при push в main)
+# ============================================================================
+
+name: Build and Deploy (GHCR)
+
+# Триггеры workflow
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+# Разрешения для работы с GHCR
+# contents:read - чтение кода репозитория
+# packages:write - публикация в GitHub Container Registry
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  # ==========================================================================
+  # JOB 1: BUILD - Сборка и публикация Docker образа
+  # ==========================================================================
+  build:
+    name: Build and Push to GHCR
+    runs-on: ubuntu-latest
+    
+    steps:
+      # Шаг 1: Получение кода из репозитория
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # Шаг 2: Установка Python для тестов
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      # Шаг 3: Установка зависимостей
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      # Шаг 4: Smoke test - проверка что код валидный
+      - name: Smoke test - import check
+        run: |
+          python -c "from app import app; print('✓ App import successful')"
+          python -c "import sys; print(f'Python version: {sys.version}')"
+
+      # Шаг 5: Логин в GitHub Container Registry
+      # Используем встроенный GITHUB_TOKEN (не нужен отдельный токен)
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # Шаг 6: Генерация метаданных для Docker образа
+      # Автоматически создаёт теги: latest и sha-xxxxx
+      - name: Docker metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          # Образ будет: ghcr.io/ergon73/test-github-actions
+          images: ghcr.io/${{ github.repository }}
+          tags: |
+            # Всегда создавать тег latest
+            type=raw,value=latest
+            # Создавать тег с SHA коммита
+            type=sha,prefix=sha-
+
+      # Шаг 7: Сборка и публикация Docker образа
+      - name: Build and Push Docker Image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+
+      # Шаг 8: Вывод информации о созданных образах
+      - name: Image digest
+        run: |
+          echo "✓ Docker image built and pushed successfully"
+          echo "Tags: ${{ steps.meta.outputs.tags }}"
+
+  # ==========================================================================
+  # JOB 2: DEPLOY - Деплой на VPS сервер
+  # Запускается только при push (merge) в main, после успешного build
+  # ==========================================================================
+  deploy:
+    name: Deploy to VPS
+    needs: build
+    # IMPORTANT: Деплой только при push в main (не при PR)
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    runs-on: ubuntu-latest
+    
+    steps:
+      # Шаг 9: SSH подключение и деплой на сервер
+      - name: Deploy to VPS via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USERNAME }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          # Передаём переменные для возможного логина в GHCR на сервере
+          envs: CR_PAT,GITHUB_ACTOR
+          # Останавливать выполнение при любой ошибке
+          script_stop: true
+          # Bash скрипт для деплоя
+          script: |
+            # ================================================================
+            # Production-ready bash скрипт для деплоя
+            # ================================================================
+            
+            # Строгий режим:
+            # -e: останавливаться при любой ошибке
+            # -u: ошибка при использовании неопределённой переменной
+            # -o pipefail: ошибка если любая команда в пайпе упала
+            set -euo pipefail
+            
+            # Переменные
+            APP_DIR=/opt/test-github-actions
+            IMAGE="ghcr.io/${{ github.repository }}:latest"
+            CONTAINER_NAME=test-github-actions
+            
+            echo "========================================"
+            echo "Starting deployment of $IMAGE"
+            echo "========================================"
+            
+            # ----------------------------------------------------------------
+            # 1. Опциональный логин в GHCR (для приватных пакетов)
+            # ----------------------------------------------------------------
+            if [ -n "${CR_PAT:-}" ]; then
+              echo "→ Logging into GHCR for private package access..."
+              echo "$CR_PAT" | docker login ghcr.io -u "${GITHUB_ACTOR}" --password-stdin
+              echo "✓ GHCR login successful"
+            else
+              echo "→ CR_PAT not provided, assuming public package"
+            fi
+            
+            # ----------------------------------------------------------------
+            # 2. Подготовка директории для приложения
+            # ----------------------------------------------------------------
+            echo "→ Preparing application directory..."
+            mkdir -p "$APP_DIR"
+            cd "$APP_DIR"
+            echo "✓ Directory ready: $APP_DIR"
+            
+            # ----------------------------------------------------------------
+            # 3. Создание docker-compose.yml на сервере
+            # Используем Heredoc БЕЗ кавычек для подстановки переменных
+            # ----------------------------------------------------------------
+            echo "→ Creating docker-compose.yml..."
+            cat > docker-compose.yml <<EOF
+            version: "3.8"
+            services:
+              app:
+                image: $IMAGE
+                container_name: $CONTAINER_NAME
+                ports:
+                  - "5000:5000"
+                environment:
+                  - FLASK_ENV=production
+                  - PORT=5000
+                restart: unless-stopped
+                healthcheck:
+                  test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
+                  interval: 30s
+                  timeout: 10s
+                  retries: 3
+                  start_period: 40s
+            EOF
+            echo "✓ docker-compose.yml created"
+            
+            # ----------------------------------------------------------------
+            # 4. Скачивание нового образа
+            # ----------------------------------------------------------------
+            echo "→ Pulling latest Docker image..."
+            docker pull "$IMAGE"
+            echo "✓ Image pulled successfully"
+            
+            # ----------------------------------------------------------------
+            # 5. Перезапуск приложения
+            # ----------------------------------------------------------------
+            echo "→ Stopping old container..."
+            docker compose down || true
+            
+            echo "→ Starting new container..."
+            docker compose up -d
+            
+            # ----------------------------------------------------------------
+            # 6. Ожидание запуска приложения
+            # ----------------------------------------------------------------
+            echo "→ Waiting for application to start..."
+            sleep 15
+            
+            # ----------------------------------------------------------------
+            # 7. КРИТИЧЕСКАЯ ВАЛИДАЦИЯ: Health check
+            # Если health check падает - выводим логи и прерываем деплой
+            # ----------------------------------------------------------------
+            echo "→ Running health check validation..."
+            if curl -f http://localhost:5000/health; then
+              echo "✓ Health check PASSED"
+              echo "✓ Application is healthy and responding"
+            else
+              echo "✗ Health check FAILED!"
+              echo "Dumping container logs for debugging:"
+              echo "========================================"
+              docker logs "$CONTAINER_NAME" || true
+              echo "========================================"
+              echo "✗ DEPLOYMENT FAILED - Health check did not pass"
+              exit 1
+            fi
+            
+            # ----------------------------------------------------------------
+            # 8. Финальная проверка статуса
+            # ----------------------------------------------------------------
+            echo "→ Verifying container status..."
+            docker ps | grep "$CONTAINER_NAME" || {
+              echo "✗ Container is not running!"
+              exit 1
+            }
+            
+            echo "========================================"
+            echo "✓ DEPLOYMENT SUCCESSFUL!"
+            echo "Application is running on port 5000"
+            echo "========================================"

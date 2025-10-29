@@ -1,0 +1,35 @@
+# ============================================================================
+# Docker Compose конфигурация для production деплоя
+# Этот файл создаётся на сервере во время деплоя
+# ============================================================================
+
+version: "3.8"
+
+services:
+  app:
+    # Образ из GitHub Container Registry
+    image: ghcr.io/ergon73/test-github-actions:latest
+    
+    # Имя контейнера (для удобного управления)
+    container_name: test-github-actions
+    
+    # Проброс портов: host:container
+    ports:
+      - "5000:5000"
+    
+    # Переменные окружения
+    environment:
+      - FLASK_ENV=production
+      - PORT=5000
+    
+    # Политика перезапуска
+    # unless-stopped: перезапускается автоматически кроме ручной остановки
+    restart: unless-stopped
+    
+    # Health check для мониторинга
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
+      interval: 30s     # Проверка каждые 30 секунд
+      timeout: 10s      # Таймаут проверки
+      retries: 3        # Количество попыток
+      start_period: 40s # Время на запуск приложения

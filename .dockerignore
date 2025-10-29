@@ -1,0 +1,59 @@
+# ============================================================================
+# .dockerignore - файлы которые не нужны в Docker образе
+# Уменьшает размер образа и время сборки
+# ============================================================================
+
+# Git
+.git
+.gitignore
+.gitattributes
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
+.Python
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+.env
+
+# IDE и редакторы
+.vscode/
+.idea/
+*.swp
+*.swo
+*.swn
+.DS_Store
+Thumbs.db
+
+# Тесты
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+.nox/
+
+# CI/CD и документация
+.github/
+*.md
+LICENSE
+
+# Docker
+Dockerfile
+docker-compose.yml
+.dockerignore
+
+# Инструкции для генерации (не нужны в контейнере)
+human-readme*.md
+genai-readme*.md
