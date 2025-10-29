@@ -172,28 +172,26 @@ jobs:
             # ----------------------------------------------------------------
             COMMIT_SHA="${{ github.sha }}"
             echo "→ Creating docker-compose.yml..."
-            cat > docker-compose.yml <<'COMPOSE_EOF'
-version: "3.8"
-services:
-  app:
-    image: ghcr.io/ergon73/test-github-actions:latest
-    container_name: test-github-actions
-    ports:
-      - "5000:5000"
-    environment:
-      - FLASK_ENV=production
-      - PORT=5000
-      - COMMIT_SHA=COMMIT_SHA_PLACEHOLDER
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 40s
-COMPOSE_EOF
-            # Заменяем placeholder на реальный COMMIT_SHA
-            sed -i "s/COMMIT_SHA_PLACEHOLDER/$COMMIT_SHA/g" docker-compose.yml
+            {
+              echo 'version: "3.8"'
+              echo 'services:'
+              echo '  app:'
+              echo "    image: $IMAGE"
+              echo "    container_name: $CONTAINER_NAME"
+              echo '    ports:'
+              echo '      - "5000:5000"'
+              echo '    environment:'
+              echo '      - FLASK_ENV=production'
+              echo '      - PORT=5000'
+              echo "      - COMMIT_SHA=$COMMIT_SHA"
+              echo '    restart: unless-stopped'
+              echo '    healthcheck:'
+              echo '      test: ["CMD", "curl", "-f", "http://localhost:5000/health"]'
+              echo '      interval: 30s'
+              echo '      timeout: 10s'
+              echo '      retries: 3'
+              echo '      start_period: 40s'
+            } > docker-compose.yml
             echo "✓ docker-compose.yml created"
             
             # ----------------------------------------------------------------
