@@ -114,9 +114,6 @@ jobs:
           host: ${{ secrets.SSH_HOST }}
           username: ${{ secrets.SSH_USERNAME }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
-          # Передаём переменные для возможного логина в GHCR на сервере
-          envs: CR_PAT
-          # Останавливать выполнение при любой ошибке
           script_stop: true
           # Bash скрипт для деплоя
           script: |
@@ -130,6 +127,12 @@ jobs:
             # -o pipefail: ошибка если любая команда в пайпе упала
             set -euo pipefail
             
+            # Debug: проверка что мы подключились
+            echo "✓ SSH connection successful"
+            echo "Hostname: $(hostname)"
+            echo "User: $(whoami)"
+            echo "Current dir: $(pwd)"
+            
             # Переменные
             APP_DIR=/opt/test-github-actions
             IMAGE="ghcr.io/${{ github.repository }}:latest"
@@ -140,20 +143,7 @@ jobs:
             echo "========================================"
             
             # ----------------------------------------------------------------
-            # 1. Опциональный логин в GHCR (для приватных пакетов)
-            # GITHUB_ACTOR подставляется через GitHub Actions
-            # ----------------------------------------------------------------
-            GITHUB_ACTOR="${{ github.actor }}"
-            if [ -n "${CR_PAT:-}" ]; then
-              echo "→ Logging into GHCR for private package access..."
-              echo "$CR_PAT" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
-              echo "✓ GHCR login successful"
-            else
-              echo "→ CR_PAT not provided, assuming public package"
-            fi
-            
-            # ----------------------------------------------------------------
-            # 2. Подготовка директории для приложения
+            # 1. Подготовка директории для приложения
             # ----------------------------------------------------------------
             echo "→ Preparing application directory..."
             mkdir -p "$APP_DIR"
