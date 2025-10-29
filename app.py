@@ -66,7 +66,9 @@ def system_info():
         "hostname": os.environ.get("HOSTNAME", "unknown"),
         "dockerized": os.path.exists("/.dockerenv"),
         "working_directory": os.getcwd(),
-        "environment": os.environ.get("FLASK_ENV", "development")
+        "environment": os.environ.get("FLASK_ENV", "development"),
+        # Добавляем метку коммита из CI/CD для верификации версии
+        "commit_sha": os.environ.get("COMMIT_SHA", "unknown")
     })
 
 if __name__ == "__main__":
